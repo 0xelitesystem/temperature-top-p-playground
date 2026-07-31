@@ -1,0 +1,1910 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Temperature and top_p Playground - watch a real softmax distribution reshape live</title>
+<meta name="description" content="Drag temperature, top_k and top_p over a small vocabulary of logits and watch the actual softmax math reshape the distribution, stage by stage, with every edge case handled and explained.">
+<link rel="canonical" href="https://0xelitesystem.github.io/temperature-top-p-playground/">
+<meta property="og:title" content="Temperature and top_p Playground">
+<meta property="og:description" content="Drag temperature, top_k and top_p over a small vocabulary of logits and watch the actual softmax math reshape the distribution, stage by stage.">
+<meta property="og:url" content="https://0xelitesystem.github.io/temperature-top-p-playground/">
+<meta property="og:type" content="website">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Temperature and top_p Playground",
+  "description": "An offline browser tool that computes softmax with temperature, top_k truncation and top_p nucleus truncation over an editable set of logits, showing each pipeline stage, the resulting entropy and effective vocabulary size, and a seeded sampling demo.",
+  "url": "https://0xelitesystem.github.io/temperature-top-p-playground/",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Any",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  }
+}
+</script>
+<style>
+:root{
+  --bg:#0d1017;
+  --surface:#141924;
+  --surface-2:#1b2130;
+  --surface-3:#232b3d;
+  --line:#2b3446;
+  --line-soft:#212938;
+  --ink:#e9eef8;
+  --ink-2:#a9b5cc;
+  --ink-3:#77849d;
+  --accent:#6bb2ff;
+  --accent-solid:#3f8fe4;
+  --on-accent:#08101c;
+  --kept:#3f8fe4;
+  --cut-k:#b8842a;
+  --cut-p:#ab63c4;
+  --good:#3fa07a;
+  --bad:#d4695f;
+  --focus:#8cc4ff;
+  --radius:10px;
+  --shadow:0 1px 2px rgba(0,0,0,.45), 0 10px 28px rgba(0,0,0,.30);
+  color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --bg:#f4f6fb;
+  --surface:#ffffff;
+  --surface-2:#eef2f8;
+  --surface-3:#e3e9f3;
+  --line:#d6dee9;
+  --line-soft:#e5eaf2;
+  --ink:#121826;
+  --ink-2:#4a5570;
+  --ink-3:#6c7894;
+  --accent:#1f6feb;
+  --accent-solid:#1f6feb;
+  --on-accent:#ffffff;
+  --kept:#1f6feb;
+  --cut-k:#9a6100;
+  --cut-p:#8b3fb0;
+  --good:#0f7a5a;
+  --bad:#a63328;
+  --focus:#1f6feb;
+  --shadow:0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.09);
+  color-scheme:light;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--ink);
+  font:15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  padding:0 0 64px;
+}
+h1,h2,h3,h4{line-height:1.25;margin:0}
+p{margin:0}
+a{color:var(--accent)}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{
+  outline:2px solid var(--focus);
+  outline-offset:2px;
+}
+code,.mono{font-family:ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace}
+code{background:var(--surface-2);border:1px solid var(--line-soft);border-radius:5px;padding:1px 5px;font-size:.88em}
+
+.skip{
+  position:absolute;left:-9999px;top:0;z-index:20;
+  background:var(--surface);color:var(--ink);padding:10px 14px;border:1px solid var(--line);border-radius:0 0 var(--radius) 0;
+}
+.skip:focus{left:0}
+
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px}
+
+header.top{
+  border-bottom:1px solid var(--line);
+  background:var(--surface);
+  padding:20px 0 18px;
+  margin-bottom:22px;
+}
+.top-row{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.top-text{flex:1 1 320px;min-width:0}
+h1{font-size:clamp(20px,3.4vw,27px);letter-spacing:-.015em}
+.tagline{color:var(--ink-2);margin-top:6px;font-size:14.5px;max-width:64ch}
+
+button{
+  font:inherit;
+  border-radius:8px;
+  border:1px solid var(--line);
+  background:var(--surface-2);
+  color:var(--ink);
+  padding:7px 12px;
+  cursor:pointer;
+}
+button:hover{background:var(--surface-3)}
+button.primary{background:var(--accent-solid);border-color:var(--accent-solid);color:var(--on-accent);font-weight:600}
+button.primary:hover{filter:brightness(1.08)}
+button.mini{padding:4px 9px;font-size:12.5px}
+button:disabled{opacity:.45;cursor:not-allowed}
+
+.panel{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  padding:18px;
+  margin-bottom:18px;
+}
+.panel > h2{
+  font-size:15px;
+  letter-spacing:.03em;
+  text-transform:uppercase;
+  color:var(--ink-2);
+  margin-bottom:4px;
+}
+.panel-hint{color:var(--ink-3);font-size:13px;margin-bottom:14px;max-width:78ch}
+
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row.tight{gap:6px}
+.spacer{flex:1 1 auto}
+
+.chip{
+  border:1px solid var(--line);
+  background:var(--surface-2);
+  color:var(--ink-2);
+  border-radius:999px;
+  padding:5px 11px;
+  font-size:13px;
+  cursor:pointer;
+}
+.chip:hover{background:var(--surface-3);color:var(--ink)}
+.chip[aria-pressed="true"]{
+  background:var(--accent-solid);
+  border-color:var(--accent-solid);
+  color:var(--on-accent);
+  font-weight:600;
+}
+
+.controls-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+  gap:16px;
+  margin-top:14px;
+}
+.ctl{
+  background:var(--surface-2);
+  border:1px solid var(--line-soft);
+  border-radius:9px;
+  padding:12px;
+}
+.ctl-head{display:flex;align-items:baseline;gap:8px;margin-bottom:2px}
+.ctl-head label{font-weight:600;font-size:14px}
+.ctl-head .mono{margin-left:auto}
+.ctl-desc{font-size:12.5px;color:var(--ink-3);margin-bottom:9px;min-height:2.2em}
+.ctl-inputs{display:flex;gap:9px;align-items:center}
+input[type=range]{flex:1 1 auto;min-width:0;accent-color:var(--accent-solid);height:22px}
+input[type=number],input[type=text]{
+  font:inherit;
+  background:var(--surface);
+  color:var(--ink);
+  border:1px solid var(--line);
+  border-radius:7px;
+  padding:6px 8px;
+  min-width:0;
+}
+input[type=number]{width:82px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+
+.status{
+  margin-top:14px;
+  border-left:3px solid var(--accent-solid);
+  background:var(--surface-2);
+  border-radius:0 8px 8px 0;
+  padding:10px 12px;
+  font-size:13.5px;
+  color:var(--ink-2);
+}
+.status strong{color:var(--ink)}
+.status.warn{border-left-color:var(--cut-k)}
+.status.error{border-left-color:var(--bad);color:var(--ink)}
+
+/* token editor */
+.tok-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;margin-bottom:12px}
+.tok{
+  display:flex;gap:6px;align-items:center;
+  background:var(--surface-2);
+  border:1px solid var(--line-soft);
+  border-radius:8px;
+  padding:6px;
+}
+.tok .idx{font-size:11.5px;color:var(--ink-3);width:20px;text-align:right;flex:0 0 auto;font-family:ui-monospace,Menlo,Consolas,monospace}
+.tok input[type=text]{flex:1 1 auto;width:10px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+.tok input[type=number]{width:74px;flex:0 0 auto}
+.tok .del{flex:0 0 auto;padding:4px 8px;line-height:1;color:var(--ink-3)}
+.tok .del:hover{color:var(--bad)}
+.tok.invalid{border-color:var(--bad)}
+
+/* pipeline strip */
+.strip{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:4px}
+.strip-node{
+  background:var(--surface-2);
+  border:1px solid var(--line);
+  border-radius:7px;
+  padding:5px 10px;
+  font-size:12.5px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+.strip-node b{color:var(--ink)}
+.strip-arrow{color:var(--ink-3);font-size:12px}
+.strip-node.drop{border-color:var(--cut-k);color:var(--ink-2)}
+
+/* stages */
+.stages{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(238px,1fr));
+  gap:12px;
+  margin-top:14px;
+}
+.stage{
+  background:var(--surface-2);
+  border:1px solid var(--line-soft);
+  border-radius:9px;
+  padding:11px 11px 13px;
+  min-width:0;
+}
+.stage-head{display:flex;align-items:center;gap:7px;margin-bottom:3px}
+.stage-num{
+  width:19px;height:19px;flex:0 0 auto;
+  border-radius:5px;
+  background:var(--surface-3);
+  color:var(--ink-2);
+  font-size:11.5px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+}
+.stage-head h3{font-size:13.5px;letter-spacing:.01em}
+.stage-count{margin-left:auto;font-size:11.5px;color:var(--ink-3);font-family:ui-monospace,Menlo,Consolas,monospace;white-space:nowrap}
+.stage-note{font-size:11.5px;color:var(--ink-3);margin-bottom:9px;min-height:2.6em;line-height:1.45}
+
+.bars{display:flex;flex-direction:column;gap:2px}
+.bar-row{display:grid;grid-template-columns:minmax(0,1fr);gap:1px;padding:2px 0}
+.bar-top{display:flex;gap:6px;align-items:baseline;min-width:0}
+.bar-label{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:11.5px;color:var(--ink);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:2.5em;flex:1 1 auto;
+}
+.bar-val{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(--ink-2);flex:0 0 auto}
+.bar-sub{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;color:var(--ink-3);margin-top:1px;text-align:right}
+.bar-track{
+  height:9px;border-radius:3px;background:var(--surface-3);overflow:hidden;position:relative;
+}
+.bar-fill{display:block;height:100%;border-radius:0 4px 4px 0;background:var(--kept);min-width:2px}
+.bar-row.cut-k .bar-fill{background:var(--cut-k);opacity:.45}
+.bar-row.cut-p .bar-fill{background:var(--cut-p);opacity:.45}
+.bar-row.cut-k .bar-label,.bar-row.cut-p .bar-label{color:var(--ink-3);text-decoration:line-through}
+.bar-row.gone .bar-track{opacity:.35}
+.bar-row.gone .bar-label{color:var(--ink-3);text-decoration:line-through}
+.tag{
+  font-size:10px;letter-spacing:.03em;text-transform:uppercase;
+  border-radius:4px;padding:1px 5px;flex:0 0 auto;
+  border:1px solid currentColor;
+}
+.tag.k{color:var(--cut-k)}
+.tag.p{color:var(--cut-p)}
+.tag.top{color:var(--kept)}
+
+/* stats */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px}
+.tile{
+  background:var(--surface-2);
+  border:1px solid var(--line-soft);
+  border-radius:9px;
+  padding:11px 12px;
+}
+.tile .k{font-size:11.5px;color:var(--ink-3);letter-spacing:.02em}
+.tile .v{font-size:21px;font-weight:650;letter-spacing:-.02em;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;margin-top:3px}
+.tile .s{font-size:11.5px;color:var(--ink-3);margin-top:2px}
+
+/* tables */
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line-soft);border-radius:9px}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:560px}
+th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--line-soft);white-space:nowrap}
+th{
+  position:sticky;top:0;
+  background:var(--surface-2);
+  color:var(--ink-2);
+  font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;font-weight:600;
+}
+td:first-child,th:first-child{text-align:left}
+tbody tr:last-child td{border-bottom:0}
+td.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
+tr.is-cut td{color:var(--ink-3)}
+tr.is-cut td:first-child{text-decoration:line-through}
+.dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.dot.kept{background:var(--kept)}
+.dot.cutk{background:var(--cut-k)}
+.dot.cutp{background:var(--cut-p)}
+
+/* legend */
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:12.5px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center}
+
+/* sampling */
+.samp-list{display:flex;flex-direction:column;gap:9px;margin-top:14px}
+.samp-row{
+  background:var(--surface-2);
+  border:1px solid var(--line-soft);
+  border-radius:9px;
+  padding:9px 11px;
+}
+.samp-label{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12.5px;font-weight:600;margin-bottom:6px;
+  word-break:break-all;
+}
+.sb{display:flex;align-items:center;gap:8px;margin-top:3px}
+.sb-key{font-size:10.5px;color:var(--ink-3);width:60px;flex:0 0 auto;text-transform:uppercase;letter-spacing:.04em}
+.sb .bar-track{flex:1 1 auto;min-width:40px}
+.sb-val{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--ink-2);width:112px;flex:0 0 auto;text-align:right}
+.bar-fill.ghost{background:transparent;border:1.5px solid var(--kept);border-radius:0 4px 4px 0;height:100%}
+
+/* explainer */
+.explain h3{font-size:16px;margin:22px 0 7px}
+.explain h3:first-of-type{margin-top:6px}
+.explain p{color:var(--ink-2);margin-bottom:9px;max-width:76ch;font-size:14px}
+.explain ul{color:var(--ink-2);margin:0 0 12px;padding-left:20px;max-width:76ch;font-size:14px}
+.explain li{margin-bottom:6px}
+.explain strong{color:var(--ink)}
+.callout{
+  border:1px solid var(--line);
+  border-left:3px solid var(--cut-k);
+  background:var(--surface-2);
+  border-radius:0 8px 8px 0;
+  padding:11px 13px;
+  margin:12px 0;
+  font-size:13.5px;
+  color:var(--ink-2);
+  max-width:78ch;
+}
+
+.empty{
+  border:1px dashed var(--line);
+  border-radius:9px;
+  padding:26px 18px;
+  text-align:center;
+  color:var(--ink-3);
+  font-size:14px;
+}
+.empty b{display:block;color:var(--ink-2);margin-bottom:6px;font-size:15px}
+
+footer.bottom{
+  border-top:1px solid var(--line);
+  margin-top:30px;
+  padding-top:18px;
+  color:var(--ink-3);
+  font-size:13.5px;
+}
+footer.bottom .row{gap:14px}
+
+@media (max-width:560px){
+  .panel{padding:14px}
+  .ctl-desc{min-height:0}
+  .stage-note{min-height:0}
+  .sb-key{width:52px}
+  .sb-val{width:96px}
+}
+@media (prefers-reduced-motion:no-preference){
+  .bar-fill{transition:width .18s ease}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the controls</a>
+
+<header class="top">
+  <div class="wrap top-row">
+    <div class="top-text">
+      <h1>Temperature and top_p Playground</h1>
+      <p class="tagline">Drag temperature, top_k and top_p over a small vocabulary of logits and watch the real softmax math reshape the distribution, one pipeline stage at a time. Everything runs in your browser.</p>
+    </div>
+    <div class="row tight">
+      <button id="load-sample" class="primary" type="button">Load sample</button>
+      <button id="theme-toggle" type="button" aria-pressed="false">Light mode</button>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+
+  <section class="panel" aria-labelledby="h-controls">
+    <h2 id="h-controls">Sampling controls</h2>
+    <p class="panel-hint">This tool applies the pipeline in one common order: temperature, then top_k, then top_p, then renormalize. Providers differ on that order. The explainer below says exactly what that means.</p>
+
+    <div class="row tight" role="group" aria-label="Preset distributions">
+      <span style="font-size:12.5px;color:var(--ink-3);margin-right:2px">Presets</span>
+      <button class="chip preset" type="button" data-preset="confident" aria-pressed="false">Confident</button>
+      <button class="chip preset" type="button" data-preset="flat" aria-pressed="false">Flat / uncertain</button>
+      <button class="chip preset" type="button" data-preset="tie" aria-pressed="false">Two-way tie</button>
+      <button class="chip preset" type="button" data-preset="longtail" aria-pressed="false">Long tail</button>
+    </div>
+
+    <div class="controls-grid">
+      <div class="ctl">
+        <div class="ctl-head"><label for="temp-range">Temperature</label><span class="mono" id="temp-echo">1.00</span></div>
+        <p class="ctl-desc">Divides every logit before the softmax. Below 1 sharpens, above 1 flattens, 0 is greedy argmax.</p>
+        <div class="ctl-inputs">
+          <input type="range" id="temp-range" min="0" max="2" step="0.01" value="1" aria-describedby="temp-help">
+          <input type="number" id="temp-num" min="0" max="10" step="0.01" value="1" aria-label="Temperature value">
+        </div>
+        <p id="temp-help" style="font-size:11px;color:var(--ink-3);margin-top:5px">Slider covers 0 to 2. The box accepts up to 10.</p>
+      </div>
+
+      <div class="ctl">
+        <div class="ctl-head"><label for="topk-range">top_k</label><span class="mono" id="topk-echo">5</span></div>
+        <p class="ctl-desc">A rank cut. Keeps exactly the k highest ranked tokens, whatever the shape of the distribution.</p>
+        <div class="ctl-inputs">
+          <input type="range" id="topk-range" min="1" max="12" step="1" value="5">
+          <input type="number" id="topk-num" min="1" max="100000" step="1" value="5" aria-label="top_k value">
+        </div>
+        <p style="font-size:11px;color:var(--ink-3);margin-top:5px">Slider stops just past the vocabulary size. The box goes higher.</p>
+      </div>
+
+      <div class="ctl">
+        <div class="ctl-head"><label for="topp-range">top_p</label><span class="mono" id="topp-echo">0.90</span></div>
+        <p class="ctl-desc">A mass cut. Keeps the smallest set of top tokens whose probabilities sum to at least p.</p>
+        <div class="ctl-inputs">
+          <input type="range" id="topp-range" min="0" max="1" step="0.01" value="0.9">
+          <input type="number" id="topp-num" min="0" max="1" step="0.001" value="0.9" aria-label="top_p value">
+        </div>
+        <p style="font-size:11px;color:var(--ink-3);margin-top:5px">At least one token always survives, even at p = 0.</p>
+      </div>
+    </div>
+
+    <div class="row tight" style="margin-top:14px" role="group" aria-label="Edge cases">
+      <span style="font-size:12.5px;color:var(--ink-3);margin-right:2px">Edge cases</span>
+      <button class="chip edge" type="button" data-edge="t0">T = 0</button>
+      <button class="chip edge" type="button" data-edge="ttiny">T = 0.01</button>
+      <button class="chip edge" type="button" data-edge="tbig">T = 5</button>
+      <button class="chip edge" type="button" data-edge="p1">top_p = 1.00</button>
+      <button class="chip edge" type="button" data-edge="plow">top_p = 0.10</button>
+      <button class="chip edge" type="button" data-edge="k1">top_k = 1</button>
+      <button class="chip edge" type="button" data-edge="kbig">top_k = 999</button>
+      <button class="chip edge" type="button" data-edge="ties">Exact tie</button>
+      <button class="chip" type="button" id="reset-btn">Reset</button>
+    </div>
+
+    <div class="status" id="status" role="status" aria-live="polite">Ready.</div>
+  </section>
+
+  <section class="panel" aria-labelledby="h-tokens">
+    <h2 id="h-tokens">Vocabulary and logits</h2>
+    <p class="panel-hint">These logits are made up. They are a toy vocabulary chosen so each lesson is visible, not measurements from any real model. Edit any of them, add tokens, or remove tokens, and every number on the page recomputes.</p>
+    <div class="tok-list" id="tok-list"></div>
+    <div class="row tight">
+      <button type="button" id="add-token">Add token</button>
+      <button type="button" id="sort-tokens" class="mini">Sort by logit</button>
+      <button type="button" id="jitter-tokens" class="mini">Nudge all by a little</button>
+      <span class="spacer"></span>
+      <span id="tok-count" style="font-size:12.5px;color:var(--ink-3)"></span>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="h-pipeline">
+    <h2 id="h-pipeline">Pipeline</h2>
+    <p class="panel-hint">Tokens removed by a stage stay visible and get marked, so you can see which control did the cutting rather than guessing from a shorter bar chart.</p>
+    <div class="strip" id="strip" aria-label="Token counts through the pipeline"></div>
+    <div class="stages" id="stages"></div>
+    <div class="legend" aria-hidden="false">
+      <span><i class="dot kept"></i>kept</span>
+      <span><i class="dot cutk"></i>cut by top_k</span>
+      <span><i class="dot cutp"></i>cut by top_p</span>
+      <span style="color:var(--ink-3)">Every cut bar is also labeled in text, so color is never the only signal.</span>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="h-stats">
+    <h2 id="h-stats">Numbers</h2>
+    <p class="panel-hint">All figures are computed exactly from the distribution shown. Nothing here is estimated or rounded before display.</p>
+    <div class="tiles" id="tiles"></div>
+    <div class="row tight" style="margin-top:14px">
+      <button type="button" class="mini" id="copy-json">Copy JSON</button>
+      <button type="button" class="mini" id="copy-csv">Copy CSV</button>
+      <button type="button" class="mini" id="copy-settings">Copy settings</button>
+    </div>
+    <div class="scroll" style="margin-top:12px">
+      <table id="tok-table">
+        <thead>
+          <tr>
+            <th scope="col">Token</th>
+            <th scope="col">Logit</th>
+            <th scope="col">p after T</th>
+            <th scope="col">Nucleus cum.</th>
+            <th scope="col">Final p</th>
+            <th scope="col">Change</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody id="tok-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="h-sampling">
+    <h2 id="h-sampling">Sampling demo</h2>
+    <p class="panel-hint">Draw N tokens from the final distribution and compare the observed frequencies with the theoretical probabilities. The generator is seeded, so the same seed and sample count always give the same counts.</p>
+    <div class="row tight">
+      <label for="samp-n" style="font-size:13px;color:var(--ink-2)">Samples</label>
+      <input type="number" id="samp-n" min="1" max="1000000" step="1" value="1000" style="width:100px">
+      <label for="samp-seed" style="font-size:13px;color:var(--ink-2);margin-left:6px">Seed</label>
+      <input type="number" id="samp-seed" min="0" max="4294967295" step="1" value="42" style="width:110px">
+      <button type="button" id="samp-run" class="primary">Draw samples</button>
+      <button type="button" id="samp-newseed" class="mini">New seed</button>
+    </div>
+    <div class="row tight" style="margin-top:8px">
+      <button class="chip mini" type="button" data-n="20">20</button>
+      <button class="chip mini" type="button" data-n="100">100</button>
+      <button class="chip mini" type="button" data-n="1000">1000</button>
+      <button class="chip mini" type="button" data-n="100000">100000</button>
+      <span style="font-size:12px;color:var(--ink-3)">Small N shows sampling variance. Large N converges on the theory.</span>
+    </div>
+    <div id="samp-out"></div>
+  </section>
+
+  <section class="panel explain" aria-labelledby="h-explain">
+    <h2 id="h-explain">The honest explainer</h2>
+
+    <h3>Why temperature 0 is still not fully deterministic in practice</h3>
+    <p>In exact arithmetic, greedy decoding is deterministic: the highest logit wins, every time. The nondeterminism you actually see does not come from the maths. It comes from how the maths is executed.</p>
+    <ul>
+      <li><strong>Floating point addition is not associative.</strong> <code>(a + b) + c</code> can differ from <code>a + (b + c)</code> in the last bits. A GPU sums thousands of terms in whatever order the work happened to be split into, and that split depends on the shape of the batch, the tile size, and which kernel the library picked.</li>
+      <li><strong>Your request is usually batched with other people's requests.</strong> A different batch shape means a different kernel and a different reduction order, so your logits change in the low bits. If the top two candidates are within that noise, argmax flips, and the whole rest of the sequence goes somewhere else.</li>
+      <li><strong>Mixture-of-experts routing has per-batch capacity.</strong> When an expert fills up, tokens are dropped or rerouted. Which tokens fill it depends on the other requests in the same batch, so your output can depend on other people's traffic.</li>
+      <li><strong>Kernels are not always deterministic.</strong> Atomic accumulation, split-K reductions, and autotuning that picks a different kernel on a different run or a different GPU model all change the low bits.</li>
+      <li><strong>Provider-side factors.</strong> A fleet usually has more than one GPU generation in it. A model alias can be repointed to a new snapshot without the name changing. Speculative decoding and prompt caching change the shapes the prefill and decode kernels see, even when the arithmetic is meant to be equivalent.</li>
+      <li><strong>Ties have to be broken somehow.</strong> If two tokens hold exactly the same top logit, argmax picks one, usually the lowest index. That is deterministic for a given implementation but arbitrary, and a one-bit change can flip which one counts as highest. You can reproduce that on this page with the two-way-tie preset at temperature 0.</li>
+    </ul>
+    <div class="callout">Practical version: temperature 0 buys you much more reproducible output than temperature 1. It does not buy you bitwise identical output across calls, across time, or across providers. If you truly need identical bytes, cache the result rather than re-requesting it.</div>
+
+    <h3>top_k and top_p interact, and the order is not standard</h3>
+    <p><strong>top_k is a rank cut and top_p is a mass cut.</strong> top_k keeps exactly k tokens no matter how the probability is spread. top_p keeps as few as one token on a confident step and dozens or hundreds on a flat one. Load the long-tail preset and move one knob at a time with the other one out of the way: at k = 5 you get exactly 5 candidates no matter what p does, while with top_k raised to 17 or above, p = 0.90 keeps 14 of the 17 tokens.</p>
+    <p>Run them together and the tighter filter wins at each step. That is why a (temperature, top_k, top_p) triple that behaves well on one stack can behave differently on another.</p>
+    <p><strong>Order matters because the second filter usually reads a renormalized distribution.</strong> This tool applies temperature, then top_k, then top_p, and it measures p against the distribution renormalized over the top_k survivors. That is what happens in the common implementation where top_k masks the losing logits to negative infinity and top_p then reads the softmax of what is left. The visible consequence: after a tight k, the same p keeps more tokens than it would have on the full distribution, because the surviving mass was rescaled up to 1. Stage 3 on this page shows the exact cumulative sums p is compared against.</p>
+    <p><strong>Providers differ and most hosted APIs do not document the internal order.</strong> In Hugging Face <code>transformers</code>, the default generation pipeline builds a list of logits processors and applies temperature scaling before top_k and top_p. In <code>llama.cpp</code> the sampler chain is explicit and user-configurable, so the order is whatever you set it to, and stacks in that family often add <code>min_p</code>, typical sampling, or repetition penalties into the same chain. Assume the order is different somewhere, and do not port a knob triple between providers expecting identical behavior.</p>
+    <p>The parameter surfaces themselves also differ, and they change over time:</p>
+    <ul>
+      <li>OpenAI's chat completions API exposes <code>temperature</code> (0 to 2) and <code>top_p</code>, has no <code>top_k</code>, and the documentation recommends changing one of the two rather than both. The reasoning models are the exception: on the o-series and GPT-5 the sampling parameters are fixed, and a request that sets a non-default <code>temperature</code> is rejected.</li>
+      <li>Anthropic's Messages API historically exposed <code>temperature</code> (0 to 1), <code>top_p</code> and <code>top_k</code> with the same "alter one, not both" guidance. On newer Claude models, starting with Opus 4.7 and including Sonnet 5, those three parameters were removed: a request that sets them returns a 400, and the guidance is to steer behavior with the prompt instead. Older models such as Sonnet 4.6 still accept them.</li>
+      <li>Google's Gemini API exposed <code>temperature</code>, <code>topP</code> and <code>topK</code> together for years. Google deprecated all three in July 2026; on the newest Flash models they are accepted and then silently ignored, and Google's documentation says future models will reject them outright.</li>
+    </ul>
+    <p>Three providers, three different answers, and two of them changed in the last year. The lesson is not "memorise the table", it is "check the current docs for the provider you are actually calling, because both the ranges and the availability move". Everything in this list was true when the page was written and is exactly the kind of claim that goes stale.</p>
+
+    <h3>Why "raise temperature for creativity" is a crude description</h3>
+    <p><strong>What temperature actually does:</strong> it divides every logit by T before the softmax. That is a monotone transform, so it never changes the ranking of tokens. It only changes the ratios between them. As T goes to 0 the distribution collapses onto the argmax. As T grows it flattens toward uniform over the whole vocabulary, and it never reaches exactly uniform for any finite T.</p>
+    <ul>
+      <li><strong>It cannot add an idea that was not already in the distribution.</strong> All it does is move probability mass down the existing ranking. In a language model the tail is mostly typos, broken syntax, wrong facts, and tokens from the wrong language, not good ideas.</li>
+      <li><strong>The effect compounds.</strong> Sampling is autoregressive. One unlikely token early drags the rest of the sequence into a region the model handles worse, and the model will then continue that mistake confidently.</li>
+      <li><strong>Truncation changes what raising T does.</strong> With top_p held fixed, raising T flattens the distribution, which widens the nucleus, so you get a flatter choice over a larger candidate set at the same time. The knobs are not independent. You can watch that happen here: fix top_p and drag temperature, and the stage 3 survivor count moves.</li>
+      <li><strong>top_k = 1 is greedy regardless of temperature.</strong> Because temperature is monotone, it never reorders anything, so the rank-1 token is the same at every T. Try the top_k = 1 chip and then drag temperature: nothing downstream changes.</li>
+      <li><strong>Structured output wants low temperature.</strong> For code, JSON, and tool calls the "creative" part of the tail is syntax errors and invented field names.</li>
+      <li><strong>What people usually want is diversity across samples</strong>, not a flatter distribution at every single step. Drawing several completions, varying the prompt, or asking explicitly for a different angle tends to get that with far fewer broken outputs than pushing T past 1.</li>
+    </ul>
+
+    <h3>What this page is, and what it is not</h3>
+    <p>Every number here is computed in the page from the logits in the editor above, using the same steps a real sampler uses: subtract the max for numerical stability, divide by temperature, exponentiate, normalize, truncate by rank, truncate by mass, renormalize. There are no libraries and no network requests.</p>
+    <p>The logits are invented and editable. They are chosen to make each lesson visible on a vocabulary of a handful of tokens instead of a hundred thousand. Nothing on this page reports a measurement from any specific model, and no benchmark figures are quoted. The sampling demo uses a seeded pseudo-random generator, so it reproduces exactly and is not a source of hidden randomness.</p>
+    <p>Real vocabularies run from roughly 30,000 tokens to a little over 250,000 depending on the tokenizer (Llama 2 uses 32,000, Llama 3 uses 128,256, Gemma uses 256,000), so a real top_p nucleus on an uncertain step can contain hundreds of tokens where this page shows a handful. The shape of the behavior is the same. The scale is not.</p>
+  </section>
+
+  <footer class="bottom">
+    <div class="row">
+      <a href="https://elitesystem.ai">An elitesystem.ai tool</a>
+      <a href="https://github.com/0xelitesystem/temperature-top-p-playground">Source on GitHub</a>
+      <a href="https://0xelitesystem.github.io/">More tools</a>
+    </div>
+    <p style="margin-top:8px">MIT licensed. No tracking, no external dependencies, nothing leaves your browser.</p>
+  </footer>
+</main>
+
+<script>
+/* ------------------------------------------------------------------ *
+ * Core numeric layer.
+ * Every function below is pure: it takes values, returns a new object, and
+ * touches no browser globals and no shared mutable state. Nothing here needs
+ * a page to run, so these functions can be lifted out and unit tested as is.
+ * ------------------------------------------------------------------ */
+
+var PIPE_EPS = 1e-9;
+
+function isFiniteNumber(x) {
+  return typeof x === 'number' && isFinite(x);
+}
+
+/* Validate and coerce a token list of { text, logit } into plain numbers. */
+function parseTokens(list) {
+  if (!Array.isArray(list) || list.length === 0) {
+    return { ok: false, error: 'Add at least one token to the vocabulary.', tokens: [] };
+  }
+  var out = [];
+  for (var i = 0; i < list.length; i++) {
+    var t = list[i] || {};
+    var raw = t.logit;
+    var num;
+    if (typeof raw === 'number') {
+      num = raw;
+    } else {
+      var str = String(raw === undefined || raw === null ? '' : raw).trim();
+      /* An empty box is a missing value, not zero. Number('') is 0, which
+         would silently invent a logit the user never typed. */
+      if (str === '') {
+        return {
+          ok: false,
+          error: 'Row ' + (i + 1) + ' has an empty logit. Type a number (it may be negative) or remove the row.',
+          tokens: []
+        };
+      }
+      num = Number(str);
+    }
+    if (!isFiniteNumber(num)) {
+      return {
+        ok: false,
+        error: 'Row ' + (i + 1) + ' does not have a finite logit. Logits are plain numbers and may be negative.',
+        tokens: []
+      };
+    }
+    var text = typeof t.text === 'string' ? t.text : String(t.text === undefined ? '' : t.text);
+    out.push({ index: i, text: text, logit: num });
+  }
+  return { ok: true, error: '', tokens: out };
+}
+
+/*
+ * Softmax with temperature.
+ * Subtracts the max logit before dividing, so exp() never overflows even at
+ * very small T. T <= 0 is treated as greedy argmax rather than a division.
+ */
+function softmaxWithTemperature(logits, temperature) {
+  var i;
+  /* Check the shape before reading .length, so a non-array returns the error
+     object instead of throwing. */
+  if (!Array.isArray(logits) || logits.length === 0) {
+    return { ok: false, error: 'Need at least one logit.', probs: [] };
+  }
+  var n = logits.length;
+  for (i = 0; i < n; i++) {
+    if (!isFiniteNumber(logits[i])) {
+      return { ok: false, error: 'Logit ' + (i + 1) + ' is not a finite number.', probs: [] };
+    }
+  }
+
+  var maxL = logits[0], maxIndex = 0;
+  for (i = 1; i < n; i++) {
+    if (logits[i] > maxL) { maxL = logits[i]; maxIndex = i; }
+  }
+  var tiedTop = [];
+  for (i = 0; i < n; i++) { if (logits[i] === maxL) tiedTop.push(i); }
+
+  var T = Number(temperature);
+
+  if (!isFiniteNumber(T) || T <= 0) {
+    var greedy = [];
+    for (i = 0; i < n; i++) greedy.push(i === maxIndex ? 1 : 0);
+    return {
+      ok: true, error: '', probs: greedy, mode: 'greedy',
+      maxIndex: maxIndex, tiedTop: tiedTop, temperature: 0,
+      note: tiedTop.length > 1
+        ? 'Temperature 0 is greedy argmax. No division happens. ' + tiedTop.length +
+          ' tokens share the top logit, so argmax has to break the tie; this tool picks the lowest index.'
+        : 'Temperature 0 is greedy argmax. No division happens, so there is no divide-by-zero: the highest logit simply takes all the mass.'
+    };
+  }
+
+  var exps = new Array(n), sum = 0;
+  for (i = 0; i < n; i++) {
+    var e = Math.exp((logits[i] - maxL) / T);
+    exps[i] = e;
+    sum += e;
+  }
+
+  if (!isFiniteNumber(sum) || sum <= 0) {
+    var fallback = [];
+    for (i = 0; i < n; i++) fallback.push(i === maxIndex ? 1 : 0);
+    return {
+      ok: true, error: '', probs: fallback, mode: 'greedy',
+      maxIndex: maxIndex, tiedTop: tiedTop, temperature: T,
+      note: 'Everything except the top logit underflowed to zero. Fell back to the greedy result, which is the limit of the softmax here.'
+    };
+  }
+
+  var probs = new Array(n);
+  for (i = 0; i < n; i++) probs[i] = exps[i] / sum;
+
+  var note = '';
+  if (T < 0.05) {
+    note = 'Very small temperature. The gaps between logits are multiplied by ' +
+      (1 / T).toFixed(0) + ' before exponentiating, so all but the top token round to about zero, but this is still a real softmax rather than an argmax.';
+  } else if (T >= 3) {
+    note = 'Large temperature flattens the distribution toward uniform. It approaches uniform but never reaches it for any finite T.';
+  }
+
+  return {
+    ok: true, error: '', probs: probs, mode: 'softmax',
+    maxIndex: maxIndex, tiedTop: tiedTop, temperature: T, note: note
+  };
+}
+
+/* Indices sorted by descending probability, ties broken by ascending index. */
+function rankOrder(probs) {
+  var idx = [];
+  for (var i = 0; i < probs.length; i++) idx.push(i);
+  idx.sort(function (a, b) {
+    if (probs[b] !== probs[a]) return probs[b] - probs[a];
+    return a - b;
+  });
+  return idx;
+}
+
+/* Rank truncation. k is clamped to at least 1 and at most the vocabulary size. */
+function applyTopK(probs, k) {
+  var n = probs.length, i;
+  var raw = Number(k);
+  /* Infinity means "no rank limit at all", which is the whole vocabulary
+     rather than a single token. Everything else floors, then clamps to 1. */
+  var requested = raw === Infinity ? n : Math.floor(raw);
+  if (!isFiniteNumber(requested) || requested < 1) requested = 1;
+
+  var order = rankOrder(probs);
+  var limit = Math.min(requested, n);
+  var kept = new Array(n);
+  for (i = 0; i < n; i++) kept[i] = false;
+  for (i = 0; i < limit; i++) kept[order[i]] = true;
+
+  var cutIndices = [];
+  for (i = limit; i < n; i++) cutIndices.push(order[i]);
+
+  var removedMass = 0;
+  for (i = 0; i < n; i++) if (!kept[i]) removedMass += probs[i];
+
+  var tieAtBoundary = false;
+  if (limit < n) tieAtBoundary = probs[order[limit - 1]] === probs[order[limit]];
+
+  return {
+    kept: kept,
+    order: order,
+    cutIndices: cutIndices,
+    survivors: limit,
+    requestedK: requested,
+    effectiveK: limit,
+    noEffect: requested >= n,
+    removedMass: removedMass,
+    tieAtBoundary: tieAtBoundary
+  };
+}
+
+/* Renormalize a probability vector over a boolean keep mask. */
+function renormalize(probs, kept) {
+  var n = probs.length, i, sum = 0;
+  for (i = 0; i < n; i++) if (kept[i]) sum += probs[i];
+
+  var out = new Array(n);
+  for (i = 0; i < n; i++) out[i] = 0;
+
+  if (!isFiniteNumber(sum) || sum <= 0) {
+    for (i = 0; i < n; i++) {
+      if (kept[i]) { out[i] = 1; return out; }
+    }
+    return out;
+  }
+  for (i = 0; i < n; i++) if (kept[i]) out[i] = probs[i] / sum;
+  return out;
+}
+
+/*
+ * Nucleus truncation.
+ * p is measured against the distribution renormalized over the incoming mask,
+ * which is what happens when top_k masks logits to -inf before the softmax
+ * that top_p reads. At least one token always survives.
+ *
+ * p of 1 (or above) short-circuits to keep-all, matching every reference
+ * implementation, where top_p = 1.0 is a no-op. Without that branch a
+ * distribution whose leader already holds essentially all the mass would have
+ * its zero-probability tail reported as "cut by top_p", which is true of the
+ * nucleus rule but useless as an explanation.
+ */
+function applyTopP(probs, incomingMask, p) {
+  var n = probs.length, i;
+  var target = Number(p);
+  if (!isFiniteNumber(target)) target = 1;
+  if (target > 1) target = 1;
+  if (target < 0) target = 0;
+
+  var nucleusProbs = renormalize(probs, incomingMask);
+
+  var candidates = [];
+  for (i = 0; i < n; i++) if (incomingMask[i]) candidates.push(i);
+  candidates.sort(function (a, b) {
+    if (nucleusProbs[b] !== nucleusProbs[a]) return nucleusProbs[b] - nucleusProbs[a];
+    return a - b;
+  });
+
+  var kept = new Array(n), cumulative = new Array(n);
+  for (i = 0; i < n; i++) { kept[i] = false; cumulative[i] = 0; }
+
+  var keepAll = target >= 1;
+  var running = 0, stopped = false, cutIndices = [], survivors = 0, cutoffAt = 0;
+  for (var j = 0; j < candidates.length; j++) {
+    var idx = candidates[j];
+    running += nucleusProbs[idx];
+    cumulative[idx] = running;
+    if (!stopped) {
+      kept[idx] = true;
+      survivors++;
+      cutoffAt = running;
+      if (!keepAll && running >= target - PIPE_EPS) stopped = true;
+    } else {
+      cutIndices.push(idx);
+    }
+  }
+
+  var removedMass = 0;
+  for (i = 0; i < n; i++) if (incomingMask[i] && !kept[i]) removedMass += nucleusProbs[i];
+
+  var topSingle = candidates.length ? nucleusProbs[candidates[0]] : 0;
+
+  return {
+    kept: kept,
+    cutIndices: cutIndices,
+    survivors: survivors,
+    candidates: candidates,
+    nucleusProbs: nucleusProbs,
+    cumulative: cumulative,
+    target: target,
+    cutoffAt: cutoffAt,
+    removedMass: removedMass,
+    noEffect: cutIndices.length === 0,
+    floorHit: survivors === 1 && candidates.length > 1 && target < topSingle,
+    tieAtBoundary: (function () {
+      if (!cutIndices.length || !survivors) return false;
+      var lastKept = candidates[survivors - 1];
+      var firstCut = candidates[survivors];
+      return firstCut !== undefined && nucleusProbs[lastKept] === nucleusProbs[firstCut];
+    })()
+  };
+}
+
+/* Shannon entropy in bits. Zero-probability entries contribute nothing. */
+function entropyBits(probs) {
+  var h = 0;
+  for (var i = 0; i < probs.length; i++) {
+    var p = probs[i];
+    if (p > 0) h -= p * (Math.log(p) / Math.LN2);
+  }
+  return h;
+}
+
+/*
+ * Perplexity, 2 ^ entropy-in-bits. For a distribution this is exactly the
+ * effective vocabulary size: the size of the uniform distribution with the
+ * same entropy.
+ */
+function perplexityFrom(probs) {
+  return Math.pow(2, entropyBits(probs));
+}
+
+/* Full pipeline: temperature, then top_k, then top_p, then renormalize. */
+function runPipeline(config) {
+  var cfg = config || {};
+  var parsed = parseTokens(cfg.tokens);
+  if (!parsed.ok) return { ok: false, error: parsed.error };
+
+  var tokens = parsed.tokens;
+  var n = tokens.length;
+  var logits = [];
+  for (var i = 0; i < n; i++) logits.push(tokens[i].logit);
+
+  var soft = softmaxWithTemperature(logits, cfg.temperature);
+  if (!soft.ok) return { ok: false, error: soft.error };
+
+  var kStep = applyTopK(soft.probs, cfg.topK);
+  var pStep = applyTopP(soft.probs, kStep.kept, cfg.topP);
+  var finalProbs = renormalize(soft.probs, pStep.kept);
+
+  var rows = [], retained = 0;
+  for (i = 0; i < n; i++) {
+    var status = 'kept';
+    if (!kStep.kept[i]) status = 'cut_k';
+    else if (!pStep.kept[i]) status = 'cut_p';
+    else retained++;
+    rows.push({
+      index: i,
+      text: tokens[i].text,
+      logit: tokens[i].logit,
+      pAfterTemp: soft.probs[i],
+      pNucleus: pStep.nucleusProbs[i],
+      cumulative: pStep.cumulative[i],
+      pFinal: finalProbs[i],
+      status: status,
+      rank: kStep.order.indexOf(i) + 1
+    });
+  }
+
+  var hFinal = entropyBits(finalProbs);
+  var hTemp = entropyBits(soft.probs);
+
+  return {
+    ok: true,
+    error: '',
+    n: n,
+    rows: rows,
+    order: kStep.order,
+    probsAfterTemp: soft.probs,
+    nucleusProbs: pStep.nucleusProbs,
+    finalProbs: finalProbs,
+    temperature: soft.temperature,
+    mode: soft.mode,
+    softNote: soft.note || '',
+    tiedTop: soft.tiedTop,
+    maxIndex: soft.maxIndex,
+    k: kStep,
+    p: pStep,
+    counts: {
+      raw: n,
+      afterTemp: n,
+      afterK: kStep.survivors,
+      afterP: pStep.survivors,
+      final: retained
+    },
+    stats: {
+      entropyBits: hFinal,
+      entropyBitsAfterTemp: hTemp,
+      entropyNats: hFinal * Math.LN2,
+      perplexity: Math.pow(2, hFinal),
+      perplexityAfterTemp: Math.pow(2, hTemp),
+      retained: retained,
+      retainedFraction: n ? retained / n : 0,
+      topProb: (function () {
+        var m = 0;
+        for (var j = 0; j < finalProbs.length; j++) if (finalProbs[j] > m) m = finalProbs[j];
+        return m;
+      })(),
+      massRemovedByK: kStep.removedMass,
+      massRemovedByP: pStep.removedMass
+    }
+  };
+}
+
+/* mulberry32: small, fast, seeded, and identical across browsers. */
+function makeRng(seed) {
+  var s = Number(seed);
+  if (!isFiniteNumber(s)) s = 1;
+  s = s >>> 0;
+  if (s === 0) s = 1;
+  return function () {
+    s = (s + 0x6D2B79F5) | 0;
+    var t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* Draw count samples from a probability vector by inverse CDF. */
+function sampleCounts(probs, count, seed) {
+  var n = probs.length, i;
+  var draws = Math.floor(Number(count));
+  if (!isFiniteNumber(draws) || draws < 0) draws = 0;
+
+  var counts = new Array(n);
+  for (i = 0; i < n; i++) counts[i] = 0;
+  if (n === 0 || draws === 0) return { counts: counts, draws: 0, seed: seed };
+
+  var cdf = new Array(n), running = 0;
+  for (i = 0; i < n; i++) { running += probs[i]; cdf[i] = running; }
+  var total = running;
+  if (!isFiniteNumber(total) || total <= 0) return { counts: counts, draws: 0, seed: seed };
+
+  var rng = makeRng(seed);
+  for (var d = 0; d < draws; d++) {
+    var r = rng() * total;
+    var lo = 0, hi = n - 1, pick = n - 1;
+    while (lo <= hi) {
+      var mid = (lo + hi) >> 1;
+      if (cdf[mid] >= r) { pick = mid; hi = mid - 1; } else { lo = mid + 1; }
+    }
+    while (pick < n - 1 && probs[pick] === 0) pick++;
+    counts[pick]++;
+  }
+  return { counts: counts, draws: draws, seed: seed };
+}
+
+/* Compare observed counts with theory. Returns per-token rows plus a summary. */
+function compareSample(probs, counts, draws) {
+  var rows = [], maxAbs = 0;
+  for (var i = 0; i < probs.length; i++) {
+    var observed = draws > 0 ? counts[i] / draws : 0;
+    var diff = observed - probs[i];
+    if (Math.abs(diff) > maxAbs) maxAbs = Math.abs(diff);
+    rows.push({
+      index: i,
+      expected: probs[i],
+      expectedCount: probs[i] * draws,
+      observed: observed,
+      count: counts[i],
+      diff: diff
+    });
+  }
+  return { rows: rows, draws: draws, maxAbsDiff: maxAbs };
+}
+</script>
+
+<script>
+/* ------------------------------------------------------------------ *
+ * UI layer. Reads and writes the DOM; all maths comes from above.
+ * ------------------------------------------------------------------ */
+(function () {
+  'use strict';
+
+  var MAX_TOKENS = 60;
+  var THEME_KEY = 'ttp-playground-theme';
+
+  function el(id) { return document.getElementById(id); }
+
+  /* ---------- theme: restore at load, then wire the toggle ---------- */
+  var themeBtn = el('theme-toggle');
+
+  function applyTheme(mode) {
+    var light = mode === 'light';
+    document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
+    themeBtn.textContent = light ? 'Dark mode' : 'Light mode';
+    themeBtn.setAttribute('aria-pressed', light ? 'true' : 'false');
+  }
+
+  function storedTheme() {
+    try { return window.localStorage.getItem(THEME_KEY); } catch (e) { return null; }
+  }
+
+  applyTheme(storedTheme() === 'light' ? 'light' : 'dark');
+
+  themeBtn.addEventListener('click', function () {
+    var next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    applyTheme(next);
+    try { window.localStorage.setItem(THEME_KEY, next); } catch (e) { /* private mode */ }
+  });
+
+  /* ---------- preset data ----------
+   * Lookup maps keyed by data-derived strings use Object.create(null) and
+   * hasOwnProperty, so a key called "constructor" or "__proto__" behaves
+   * like any other key instead of hitting the prototype chain.
+   */
+  function has(map, key) { return Object.prototype.hasOwnProperty.call(map, key); }
+
+  function tok(text, logit) { return { text: text, logit: String(logit) }; }
+
+  function longTailTokens() {
+    var list = [tok('sat', 4.5)];
+    var tail = ['ran', 'jumped', 'slept', 'waited', 'stared', 'yawned', 'stretched', 'blinked',
+                'purred', 'hissed', 'climbed', 'hid', 'watched', 'pounced', 'wandered', 'sulked'];
+    for (var i = 0; i < tail.length; i++) list.push(tok(tail[i], (1.5 - i * 0.01).toFixed(2)));
+    return list;
+  }
+
+  var PRESETS = Object.create(null);
+  PRESETS.confident = {
+    label: 'Confident',
+    note: 'One token dominates. top_p cuts almost everything even at a generous 0.90, because the leader alone already covers most of the mass.',
+    temperature: 1, topK: 5, topP: 0.9,
+    tokens: [tok('the', 6.2), tok('a', 2.4), tok('an', 1.6), tok('this', 1.1), tok('that', 0.7), tok('some', 0.2), tok('each', -0.4)]
+  };
+  PRESETS.flat = {
+    label: 'Flat / uncertain',
+    note: 'The model has no strong opinion. Entropy is near its maximum, and top_p has to keep nearly everything to reach 0.90.',
+    temperature: 1, topK: 5, topP: 0.9,
+    tokens: [tok('red', 2.00), tok('blue', 1.97), tok('green', 1.94), tok('grey', 1.92), tok('black', 1.90), tok('white', 1.88), tok('brown', 1.85)]
+  };
+  PRESETS.tie = {
+    label: 'Two-way tie',
+    note: 'Two tokens hold exactly the same logit. Watch what top_k = 1 and temperature 0 do here: something has to break the tie, and the tie-break is positional.',
+    temperature: 1, topK: 3, topP: 0.9,
+    tokens: [tok('cat', 4.00), tok('dog', 4.00), tok('bird', 1.20), tok('fish', 0.90), tok('horse', 0.40), tok('mouse', -0.30)]
+  };
+  PRESETS.longtail = {
+    label: 'Long tail',
+    note: 'One clear leader and a long tail of near-identical low-probability tokens. This is where top_k and top_p diverge hardest. As loaded, top_k = 5 has already cut the tail down to five candidates before top_p runs at all. Raise top_k to 17 or higher and the same p = 0.90 keeps 14 of the 17 instead.',
+    temperature: 1, topK: 5, topP: 0.9,
+    tokens: longTailTokens()
+  };
+
+  var EDGES = Object.create(null);
+  EDGES.t0 = {
+    apply: function (s) { s.temperature = 0; },
+    note: 'Temperature 0. Nothing is divided by zero: the code branches to greedy argmax, which is the limit of the softmax as T approaches 0. The top token takes all the probability and every other token is already at exactly zero, so anything the truncation stages remove from here was worth nothing to begin with.'
+  };
+  EDGES.ttiny = {
+    apply: function (s) { s.temperature = 0.01; },
+    note: 'Temperature 0.01 is not the same code path as 0. Every gap between logits is multiplied by 100 before exponentiating, so the non-leaders underflow to about zero, but this is a genuine softmax. Subtracting the max logit first is what stops exp() overflowing here.'
+  };
+  EDGES.tbig = {
+    apply: function (s) { s.temperature = 5; },
+    note: 'Temperature 5 shrinks every gap by a factor of 5, pushing the distribution toward uniform. It gets arbitrarily close but never reaches uniform for finite T. Note the entropy climbing and the effective vocabulary size approaching the token count.'
+  };
+  EDGES.p1 = {
+    apply: function (s) { s.topP = 1; },
+    note: 'top_p = 1.00 keeps everything that survived top_k. Two things make that true. A p of 1 or above short-circuits to keep-all, the way every reference implementation treats it, and for any p just below 1 the running total is compared against p minus a tiny tolerance, because in floating point a sum that should be exactly 1 can land on 0.9999999999. A strict comparison would drop the last token for no reason.'
+  };
+  EDGES.plow = {
+    apply: function (s) { s.topP = 0.1; },
+    note: 'top_p below the largest single probability. The nucleus rule is "the smallest set whose cumulative probability is at least p", and if the leader alone already exceeds p, that set is one token. The implementation must keep at least one token, otherwise you get an empty distribution and nothing to sample from.'
+  };
+  EDGES.k1 = {
+    apply: function (s) { s.topK = 1; },
+    note: 'top_k = 1 is greedy at the truncation stage. Now drag temperature: nothing downstream changes, because temperature is a monotone transform and never reorders the tokens. Only the rank matters at k = 1.'
+  };
+  EDGES.kbig = {
+    apply: function (s) { s.topK = 999; },
+    note: 'top_k larger than the vocabulary does nothing at all. It is clamped to the vocabulary size and removes zero tokens. Many APIs silently accept a k far above their real vocabulary for exactly this reason.'
+  };
+  EDGES.ties = {
+    apply: function (s) {
+      s.tokens = PRESETS.tie.tokens.slice();
+      s.topK = 1;
+      s.temperature = 1;
+      s.topP = 0.9;
+    },
+    note: 'Two tokens hold exactly the same logit, so they get exactly the same probability. Rank order then depends entirely on the tie-break. This tool sorts by descending probability and breaks ties by ascending index, so with top_k = 1 the earlier token survives purely because of its position. Real implementations do the same thing with a sort whose behavior on equal keys is an implementation detail.'
+  };
+
+  /* ---------- state ---------- */
+  var state = {
+    tokens: PRESETS.confident.tokens.map(function (t) { return { text: t.text, logit: t.logit }; }),
+    temperature: 1,
+    topK: 5,
+    topP: 0.9,
+    preset: 'confident',
+    sample: null,
+    result: null
+  };
+
+  /* ---------- formatting ---------- */
+  function fmtPct(p) {
+    if (!isFiniteNumber(p)) return '-';
+    if (p === 0) return '0%';
+    if (p < 0.00005) return '<0.01%';
+    return (p * 100).toFixed(2) + '%';
+  }
+  function fmtProb(p) {
+    if (!isFiniteNumber(p)) return '-';
+    if (p === 0) return '0';
+    if (p < 1e-6) return p.toExponential(2);
+    return p.toFixed(6);
+  }
+  function fmtNum(x, dp) {
+    if (!isFiniteNumber(x)) return '-';
+    return x.toFixed(dp === undefined ? 3 : dp);
+  }
+  function fmtSigned(x) {
+    if (!isFiniteNumber(x)) return '-';
+    var s = (x >= 0 ? '+' : '') + (x * 100).toFixed(2) + '%';
+    return s;
+  }
+
+  /* ---------- DOM helpers (textContent only; no HTML from user data) ---------- */
+  function make(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+  }
+  function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+
+  function displayName(text, index) {
+    var t = typeof text === 'string' ? text.trim() : '';
+    if (t === '') return '(token ' + (index + 1) + ')';
+    return t;
+  }
+
+  /* ---------- token editor ---------- */
+  var tokList = el('tok-list');
+
+  function renderTokenEditor() {
+    clear(tokList);
+    for (var i = 0; i < state.tokens.length; i++) {
+      (function (i) {
+        var t = state.tokens[i];
+        var row = make('div', 'tok');
+        row.appendChild(make('span', 'idx', String(i + 1)));
+
+        var textInput = document.createElement('input');
+        textInput.type = 'text';
+        textInput.value = t.text;
+        textInput.setAttribute('aria-label', 'Token text for row ' + (i + 1));
+        textInput.addEventListener('input', function () {
+          state.tokens[i].text = textInput.value;
+          state.preset = '';
+          update();
+        });
+
+        var numInput = document.createElement('input');
+        numInput.type = 'number';
+        numInput.step = '0.1';
+        numInput.value = t.logit;
+        numInput.setAttribute('aria-label', 'Logit for row ' + (i + 1));
+        numInput.addEventListener('input', function () {
+          state.tokens[i].logit = numInput.value;
+          state.preset = '';
+          var bad = numInput.value.trim() === '' || !isFinite(Number(numInput.value));
+          if (bad) row.classList.add('invalid'); else row.classList.remove('invalid');
+          update();
+        });
+
+        var del = make('button', 'del mini', 'x');
+        del.type = 'button';
+        del.setAttribute('aria-label', 'Remove row ' + (i + 1));
+        del.addEventListener('click', function () {
+          state.tokens.splice(i, 1);
+          state.preset = '';
+          state.sample = null;
+          renderTokenEditor();
+          update();
+        });
+
+        row.appendChild(textInput);
+        row.appendChild(numInput);
+        row.appendChild(del);
+        tokList.appendChild(row);
+      })(i);
+    }
+
+    if (state.tokens.length === 0) {
+      var empty = make('div', 'empty');
+      empty.appendChild(make('b', '', 'No tokens yet'));
+      empty.appendChild(make('span', '', 'Add a token or load one of the presets above to see the pipeline.'));
+      tokList.appendChild(empty);
+    }
+
+    el('tok-count').textContent = state.tokens.length + ' of ' + MAX_TOKENS + ' tokens';
+    el('add-token').disabled = state.tokens.length >= MAX_TOKENS;
+    syncSliderBounds();
+  }
+
+  function syncSliderBounds() {
+    var n = Math.max(1, state.tokens.length);
+    var kRange = el('topk-range');
+    kRange.max = String(n + 3);
+    if (Number(kRange.value) > n + 3) kRange.value = String(n + 3);
+  }
+
+  /* ---------- control wiring ---------- */
+  function clampNum(v, lo, hi, fallback) {
+    var x = Number(v);
+    if (!isFinite(x)) return fallback;
+    if (x < lo) return lo;
+    if (x > hi) return hi;
+    return x;
+  }
+
+  function pushControlsToInputs() {
+    el('temp-range').value = String(Math.min(2, state.temperature));
+    el('temp-num').value = String(state.temperature);
+    el('temp-echo').textContent = state.temperature.toFixed(2);
+
+    el('topk-range').value = String(Math.min(Number(el('topk-range').max), state.topK));
+    el('topk-num').value = String(state.topK);
+    el('topk-echo').textContent = String(state.topK);
+
+    el('topp-range').value = String(state.topP);
+    el('topp-num').value = String(state.topP);
+    el('topp-echo').textContent = state.topP.toFixed(2);
+  }
+
+  function bindPair(rangeId, numId, key, lo, hi, decimals) {
+    var range = el(rangeId), num = el(numId);
+    range.addEventListener('input', function () {
+      state[key] = clampNum(range.value, lo, hi, state[key]);
+      state.sample = null;
+      pushControlsToInputs();
+      update();
+    });
+    num.addEventListener('input', function () {
+      if (num.value.trim() === '') return;
+      state[key] = clampNum(num.value, lo, hi, state[key]);
+      state.sample = null;
+      if (decimals === 0) state[key] = Math.round(state[key]);
+      pushControlsToInputs();
+      update();
+    });
+  }
+
+  bindPair('temp-range', 'temp-num', 'temperature', 0, 10, 2);
+  bindPair('topk-range', 'topk-num', 'topK', 1, 100000, 0);
+  bindPair('topp-range', 'topp-num', 'topP', 0, 1, 2);
+
+  /* ---------- presets and edge cases ---------- */
+  function loadPreset(id) {
+    if (!has(PRESETS, id)) return;
+    var p = PRESETS[id];
+    state.tokens = p.tokens.map(function (t) { return { text: t.text, logit: t.logit }; });
+    state.temperature = p.temperature;
+    state.topK = p.topK;
+    state.topP = p.topP;
+    state.preset = id;
+    state.sample = null;
+    renderTokenEditor();
+    pushControlsToInputs();
+    update(p.note);
+  }
+
+  var presetButtons = document.querySelectorAll('.chip.preset');
+  for (var pi = 0; pi < presetButtons.length; pi++) {
+    (function (btn) {
+      btn.addEventListener('click', function () { loadPreset(btn.getAttribute('data-preset')); });
+    })(presetButtons[pi]);
+  }
+
+  var edgeButtons = document.querySelectorAll('.chip.edge');
+  for (var ei = 0; ei < edgeButtons.length; ei++) {
+    (function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.getAttribute('data-edge');
+        if (!has(EDGES, id)) return;
+        EDGES[id].apply(state);
+        state.sample = null;
+        renderTokenEditor();
+        pushControlsToInputs();
+        update(EDGES[id].note);
+      });
+    })(edgeButtons[ei]);
+  }
+
+  el('reset-btn').addEventListener('click', function () { loadPreset('confident'); });
+
+  el('load-sample').addEventListener('click', function () {
+    loadPreset('longtail');
+    state.temperature = 0.9;
+    state.topK = 8;
+    state.topP = 0.9;
+    pushControlsToInputs();
+    update('Sample loaded: a long tail with temperature 0.9, top_k 8 and top_p 0.90, so both truncation stages visibly remove tokens. Scroll down for the numbers and the sampling demo.');
+    runSample();
+  });
+
+  el('add-token').addEventListener('click', function () {
+    if (state.tokens.length >= MAX_TOKENS) return;
+    state.tokens.push({ text: 'token' + (state.tokens.length + 1), logit: '0' });
+    state.preset = '';
+    state.sample = null;
+    renderTokenEditor();
+    update();
+  });
+
+  el('sort-tokens').addEventListener('click', function () {
+    state.tokens.sort(function (a, b) { return Number(b.logit) - Number(a.logit); });
+    state.preset = '';
+    state.sample = null;
+    renderTokenEditor();
+    update('Sorted by logit. Sorting changes nothing about the maths, only the reading order.');
+  });
+
+  el('jitter-tokens').addEventListener('click', function () {
+    var rng = makeRng(Date.now() >>> 0);
+    for (var i = 0; i < state.tokens.length; i++) {
+      var base = Number(state.tokens[i].logit);
+      if (!isFinite(base)) base = 0;
+      state.tokens[i].logit = (base + (rng() - 0.5) * 0.6).toFixed(2);
+    }
+    state.preset = '';
+    state.sample = null;
+    renderTokenEditor();
+    update('Nudged every logit by a small random amount. Exact ties are now broken, which changes the rank order without changing the shape much.');
+  });
+
+  /* ---------- rendering ---------- */
+  var stripEl = el('strip');
+  var stagesEl = el('stages');
+  var tilesEl = el('tiles');
+  var tbodyEl = el('tok-tbody');
+  var statusEl = el('status');
+  var sampOut = el('samp-out');
+
+  function setStatus(text, kind) {
+    statusEl.className = 'status' + (kind ? ' ' + kind : '');
+    clear(statusEl);
+    statusEl.appendChild(document.createTextNode(text));
+  }
+
+  function stripNode(label, value, drop) {
+    var node = make('span', 'strip-node' + (drop ? ' drop' : ''));
+    node.appendChild(document.createTextNode(label + ' '));
+    node.appendChild(make('b', '', String(value)));
+    return node;
+  }
+
+  function renderStrip(r) {
+    clear(stripEl);
+    var arrow = function () { return make('span', 'strip-arrow', '->'); };
+    stripEl.appendChild(stripNode('raw', r.counts.raw));
+    stripEl.appendChild(arrow());
+    stripEl.appendChild(stripNode('after T=' + r.temperature.toFixed(2), r.counts.afterTemp));
+    stripEl.appendChild(arrow());
+    stripEl.appendChild(stripNode('after top_k=' + state.topK, r.counts.afterK, r.counts.afterK < r.counts.afterTemp));
+    stripEl.appendChild(arrow());
+    stripEl.appendChild(stripNode('after top_p=' + state.topP.toFixed(2), r.counts.afterP, r.counts.afterP < r.counts.afterK));
+    stripEl.appendChild(arrow());
+    stripEl.appendChild(stripNode('final', r.counts.final));
+  }
+
+  function barRow(label, widthPct, valueText, statusClass, tagText, tagClass, subText) {
+    var row = make('div', 'bar-row' + (statusClass ? ' ' + statusClass : ''));
+
+    var top = make('div', 'bar-top');
+    top.appendChild(make('span', 'bar-label', label));
+    if (tagText) top.appendChild(make('span', 'tag ' + (tagClass || ''), tagText));
+    top.appendChild(make('span', 'bar-val', valueText));
+    row.appendChild(top);
+
+    var track = make('div', 'bar-track');
+    var fill = make('span', 'bar-fill');
+    var w = Math.max(0, Math.min(100, widthPct));
+    fill.style.width = w.toFixed(2) + '%';
+    track.appendChild(fill);
+    row.appendChild(track);
+
+    /* Secondary numbers go on their own line so a long value can never
+       squeeze the token label down to an ellipsis. */
+    if (subText) row.appendChild(make('div', 'bar-sub', subText));
+    return row;
+  }
+
+  function makeStage(num, title, count, note) {
+    var card = make('div', 'stage');
+    var head = make('div', 'stage-head');
+    head.appendChild(make('span', 'stage-num', String(num)));
+    head.appendChild(make('h3', '', title));
+    head.appendChild(make('span', 'stage-count', count));
+    card.appendChild(head);
+    card.appendChild(make('p', 'stage-note', note));
+    var bars = make('div', 'bars');
+    card.appendChild(bars);
+    card._bars = bars;
+    return card;
+  }
+
+  function renderStages(r) {
+    clear(stagesEl);
+    var i, row, order = r.order;
+
+    /* stage 0: raw logits */
+    var minL = Infinity, maxL = -Infinity;
+    for (i = 0; i < r.rows.length; i++) {
+      if (r.rows[i].logit < minL) minL = r.rows[i].logit;
+      if (r.rows[i].logit > maxL) maxL = r.rows[i].logit;
+    }
+    var span = maxL - minL;
+    var s0 = makeStage(1, 'Raw logits', r.n + ' tokens',
+      'Unnormalized scores straight from the model head. They are not probabilities and do not sum to anything. Bar length is measured from the lowest logit shown.');
+    for (i = 0; i < order.length; i++) {
+      row = r.rows[order[i]];
+      var w = span > 0 ? ((row.logit - minL) / span) * 100 : 100;
+      s0._bars.appendChild(barRow(displayName(row.text, row.index), Math.max(w, 1.5), row.logit.toFixed(2), '', null, null));
+    }
+    stagesEl.appendChild(s0);
+
+    /* stage 1: after temperature */
+    var maxAfterT = 0;
+    for (i = 0; i < r.probsAfterTemp.length; i++) if (r.probsAfterTemp[i] > maxAfterT) maxAfterT = r.probsAfterTemp[i];
+    var tNote = r.mode === 'greedy'
+      ? 'Temperature 0 short-circuits to greedy argmax. No softmax is evaluated and nothing is divided by zero.'
+      : 'Subtract the max logit, divide by T, exponentiate, normalize. Subtracting the max first is what keeps exp() from overflowing at small T.';
+    var s1 = makeStage(2, 'After temperature', r.n + ' tokens', tNote);
+    for (i = 0; i < order.length; i++) {
+      row = r.rows[order[i]];
+      var w1 = maxAfterT > 0 ? (row.pAfterTemp / maxAfterT) * 100 : 0;
+      s1._bars.appendChild(barRow(displayName(row.text, row.index), w1, fmtPct(row.pAfterTemp), '',
+        row.index === r.maxIndex ? 'top' : null, 'top'));
+    }
+    stagesEl.appendChild(s1);
+
+    /* stage 2: after top_k */
+    var kNote;
+    if (r.k.noEffect) {
+      kNote = 'top_k = ' + r.k.requestedK + ' is at or above the vocabulary size of ' + r.n + ', so it is clamped and removes nothing.';
+    } else {
+      kNote = 'A rank cut: keep the ' + r.k.effectiveK + ' highest ranked tokens and drop the rest, removing ' +
+        fmtPct(r.k.removedMass) + ' of the mass.' + (r.k.tieAtBoundary ? ' The tokens either side of the cut are exactly tied, so the tie-break decided which one survived.' : '');
+    }
+    var s2 = makeStage(3, 'After top_k', r.counts.afterK + ' of ' + r.n, kNote);
+    for (i = 0; i < order.length; i++) {
+      row = r.rows[order[i]];
+      var cutByK = row.status === 'cut_k';
+      var w2 = maxAfterT > 0 ? (row.pAfterTemp / maxAfterT) * 100 : 0;
+      s2._bars.appendChild(barRow(displayName(row.text, row.index), w2, fmtPct(row.pAfterTemp),
+        cutByK ? 'cut-k' : '', cutByK ? 'cut by top_k' : null, 'k'));
+    }
+    stagesEl.appendChild(s2);
+
+    /* stage 3: after top_p */
+    var pNote;
+    if (r.p.floorHit) {
+      pNote = 'top_p = ' + r.p.target.toFixed(2) + ' is below the largest single probability, so the smallest qualifying set is one token. The nucleus always keeps at least one token, otherwise there would be nothing to sample.';
+    } else if (r.p.noEffect) {
+      pNote = 'Every token that survived top_k is inside the nucleus at p = ' + r.p.target.toFixed(2) + ', so top_p removes nothing here.';
+    } else {
+      pNote = 'A mass cut, measured on the distribution renormalized over the top_k survivors. Tokens are added in rank order until the running total reaches ' +
+        r.p.target.toFixed(2) + '; it stopped at ' + fmtPct(r.p.cutoffAt) + '.' +
+        (r.p.tieAtBoundary ? ' The tokens either side of the cut are exactly tied.' : '');
+    }
+    var s3 = makeStage(4, 'After top_p', r.counts.afterP + ' of ' + r.counts.afterK, pNote);
+    var maxNuc = 0;
+    for (i = 0; i < r.nucleusProbs.length; i++) if (r.nucleusProbs[i] > maxNuc) maxNuc = r.nucleusProbs[i];
+    /* The last token the nucleus accepted: the one whose running total reached p. */
+    var boundaryIndex = (r.p.survivors > 0 && r.p.cutIndices.length > 0)
+      ? r.p.candidates[r.p.survivors - 1] : -1;
+    for (i = 0; i < order.length; i++) {
+      row = r.rows[order[i]];
+      if (row.status === 'cut_k') {
+        s3._bars.appendChild(barRow(displayName(row.text, row.index), 0, 'removed', 'gone', 'cut by top_k', 'k'));
+        continue;
+      }
+      var w3 = maxNuc > 0 ? (row.pNucleus / maxNuc) * 100 : 0;
+      var cutByP = row.status === 'cut_p';
+      var sub = 'running total ' + fmtPct(row.cumulative);
+      if (row.index === boundaryIndex) sub += ' (reached p, cut after this)';
+      s3._bars.appendChild(barRow(displayName(row.text, row.index), w3, fmtPct(row.pNucleus),
+        cutByP ? 'cut-p' : '', cutByP ? 'cut by top_p' : null, 'p', sub));
+    }
+    stagesEl.appendChild(s3);
+
+    /* stage 4: final */
+    var s4 = makeStage(5, 'Final distribution', r.counts.final + ' of ' + r.n,
+      'Survivors renormalized so they sum to 1. This is what a sampler actually draws from. Entropy ' +
+      fmtNum(r.stats.entropyBits, 3) + ' bits, effective vocabulary ' + fmtNum(r.stats.perplexity, 2) + '.');
+    var maxFinal = 0;
+    for (i = 0; i < r.finalProbs.length; i++) if (r.finalProbs[i] > maxFinal) maxFinal = r.finalProbs[i];
+    for (i = 0; i < order.length; i++) {
+      row = r.rows[order[i]];
+      if (row.status !== 'kept') {
+        s4._bars.appendChild(barRow(displayName(row.text, row.index), 0, 'removed', 'gone',
+          row.status === 'cut_k' ? 'cut by top_k' : 'cut by top_p', row.status === 'cut_k' ? 'k' : 'p'));
+        continue;
+      }
+      var w4 = maxFinal > 0 ? (row.pFinal / maxFinal) * 100 : 0;
+      s4._bars.appendChild(barRow(displayName(row.text, row.index), w4, fmtPct(row.pFinal), '', null, null));
+    }
+    stagesEl.appendChild(s4);
+  }
+
+  function tile(key, value, sub) {
+    var t = make('div', 'tile');
+    t.appendChild(make('div', 'k', key));
+    t.appendChild(make('div', 'v', value));
+    t.appendChild(make('div', 's', sub));
+    return t;
+  }
+
+  function renderTiles(r) {
+    clear(tilesEl);
+    tilesEl.appendChild(tile('Entropy (final)', fmtNum(r.stats.entropyBits, 3) + ' bits',
+      'was ' + fmtNum(r.stats.entropyBitsAfterTemp, 3) + ' bits before truncation'));
+    tilesEl.appendChild(tile('Effective vocabulary', fmtNum(r.stats.perplexity, 2),
+      'perplexity, 2 ^ entropy in bits'));
+    tilesEl.appendChild(tile('Tokens retained', r.stats.retained + ' / ' + r.n,
+      fmtPct(r.stats.retainedFraction) + ' of the vocabulary'));
+    tilesEl.appendChild(tile('Top-1 probability', fmtPct(r.stats.topProb),
+      'after renormalizing'));
+    tilesEl.appendChild(tile('Mass cut by top_k', fmtPct(r.stats.massRemovedByK),
+      r.k.noEffect ? 'top_k had no effect' : r.k.cutIndices.length + ' token(s) removed'));
+    tilesEl.appendChild(tile('Mass cut by top_p', fmtPct(r.stats.massRemovedByP),
+      r.p.noEffect ? 'top_p had no effect' : r.p.cutIndices.length + ' token(s) removed, measured post-k'));
+  }
+
+  function renderTable(r) {
+    clear(tbodyEl);
+    for (var i = 0; i < r.order.length; i++) {
+      var row = r.rows[r.order[i]];
+      var tr = document.createElement('tr');
+      if (row.status !== 'kept') tr.className = 'is-cut';
+
+      var tdName = make('td', '');
+      var dot = make('i', 'dot ' + (row.status === 'kept' ? 'kept' : row.status === 'cut_k' ? 'cutk' : 'cutp'));
+      tdName.appendChild(dot);
+      tdName.appendChild(document.createTextNode(displayName(row.text, row.index)));
+      tr.appendChild(tdName);
+
+      tr.appendChild(make('td', 'mono', row.logit.toFixed(2)));
+      tr.appendChild(make('td', 'mono', fmtProb(row.pAfterTemp)));
+      tr.appendChild(make('td', 'mono', row.status === 'cut_k' ? '-' : fmtProb(row.cumulative)));
+      tr.appendChild(make('td', 'mono', fmtProb(row.pFinal)));
+      tr.appendChild(make('td', 'mono', fmtSigned(row.pFinal - row.pAfterTemp)));
+      tr.appendChild(make('td', '', row.status === 'kept' ? 'kept' : row.status === 'cut_k' ? 'cut by top_k' : 'cut by top_p'));
+
+      tbodyEl.appendChild(tr);
+    }
+  }
+
+  /* ---------- sampling ---------- */
+  function runSample() {
+    var r = state.result;
+    if (!r || !r.ok) return;
+    var n = clampNum(el('samp-n').value, 1, 1000000, 1000);
+    var seed = clampNum(el('samp-seed').value, 0, 4294967295, 42);
+    n = Math.round(n); seed = Math.round(seed);
+    el('samp-n').value = String(n);
+    el('samp-seed').value = String(seed);
+
+    var drawn = sampleCounts(r.finalProbs, n, seed);
+    state.sample = compareSample(r.finalProbs, drawn.counts, drawn.draws);
+    state.sample.seed = seed;
+    renderSample(r);
+  }
+
+  function renderSample(r) {
+    clear(sampOut);
+    if (!state.sample) {
+      var hint = make('div', 'empty');
+      hint.appendChild(make('b', '', 'No draw yet'));
+      hint.appendChild(make('span', '', 'Press "Draw samples" to compare observed frequencies against the theoretical probabilities above.'));
+      sampOut.appendChild(hint);
+      return;
+    }
+
+    var s = state.sample;
+    var head = make('p', 'panel-hint',
+      'Seed ' + s.seed + ', ' + s.draws + ' draws. Largest gap between observed frequency and theory: ' +
+      fmtPct(s.maxAbsDiff) + '. Lower the sample count and redraw to watch that gap grow.');
+    head.style.marginTop = '14px';
+    head.style.marginBottom = '0';
+    sampOut.appendChild(head);
+
+    var list = make('div', 'samp-list');
+    var maxP = 0, i;
+    for (i = 0; i < s.rows.length; i++) {
+      if (s.rows[i].expected > maxP) maxP = s.rows[i].expected;
+      if (s.rows[i].observed > maxP) maxP = s.rows[i].observed;
+    }
+
+    var shown = 0;
+    for (i = 0; i < r.order.length; i++) {
+      var idx = r.order[i];
+      var row = r.rows[idx];
+      if (row.status !== 'kept') continue;
+      var sr = s.rows[idx];
+      shown++;
+
+      var card = make('div', 'samp-row');
+      card.appendChild(make('div', 'samp-label', displayName(row.text, row.index)));
+
+      var theory = make('div', 'sb');
+      theory.appendChild(make('span', 'sb-key', 'theory'));
+      var tTrack = make('div', 'bar-track');
+      var tFill = make('span', 'bar-fill ghost');
+      tFill.style.width = (maxP > 0 ? (sr.expected / maxP) * 100 : 0).toFixed(2) + '%';
+      tTrack.appendChild(tFill);
+      theory.appendChild(tTrack);
+      theory.appendChild(make('span', 'sb-val', fmtPct(sr.expected)));
+      card.appendChild(theory);
+
+      var obs = make('div', 'sb');
+      obs.appendChild(make('span', 'sb-key', 'sampled'));
+      var oTrack = make('div', 'bar-track');
+      var oFill = make('span', 'bar-fill');
+      oFill.style.width = (maxP > 0 ? (sr.observed / maxP) * 100 : 0).toFixed(2) + '%';
+      oTrack.appendChild(oFill);
+      obs.appendChild(oTrack);
+      obs.appendChild(make('span', 'sb-val', fmtPct(sr.observed) + ' (' + sr.count + ')'));
+      card.appendChild(obs);
+
+      var diff = make('div', 'sb');
+      diff.appendChild(make('span', 'sb-key', 'diff'));
+      var diffText = make('span', '', fmtSigned(sr.diff) + ' vs expected count ' + sr.expectedCount.toFixed(1));
+      diffText.style.fontSize = '11.5px';
+      diffText.style.color = 'var(--ink-3)';
+      diffText.style.fontFamily = 'ui-monospace, Menlo, Consolas, monospace';
+      diff.appendChild(diffText);
+      card.appendChild(diff);
+
+      list.appendChild(card);
+      if (shown >= 24) break;
+    }
+    sampOut.appendChild(list);
+
+    if (shown === 0) {
+      sampOut.appendChild(make('div', 'empty', 'Nothing survived the pipeline, so there is nothing to sample.'));
+    }
+  }
+
+  el('samp-run').addEventListener('click', runSample);
+  el('samp-newseed').addEventListener('click', function () {
+    el('samp-seed').value = String(Math.floor(Math.random() * 4294967295));
+    runSample();
+  });
+  var nChips = document.querySelectorAll('.chip[data-n]');
+  for (var ni = 0; ni < nChips.length; ni++) {
+    (function (btn) {
+      btn.addEventListener('click', function () {
+        el('samp-n').value = btn.getAttribute('data-n');
+        runSample();
+      });
+    })(nChips[ni]);
+  }
+
+  /* ---------- copy buttons ---------- */
+  function flash(btn, label) {
+    var original = btn.getAttribute('data-label') || btn.textContent;
+    btn.setAttribute('data-label', original);
+    btn.textContent = label || 'Copied';
+    window.setTimeout(function () { btn.textContent = original; }, 1400);
+  }
+
+  function fallbackCopy(text, btn) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      flash(btn, ok ? 'Copied' : 'Copy failed');
+    } catch (e) {
+      flash(btn, 'Copy failed');
+    }
+  }
+
+  function copyText(text, btn) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flash(btn); }, function () { fallbackCopy(text, btn); });
+    } else {
+      fallbackCopy(text, btn);
+    }
+  }
+
+  function buildExport() {
+    var r = state.result;
+    if (!r || !r.ok) return null;
+    var tokens = [];
+    for (var i = 0; i < r.rows.length; i++) {
+      var row = r.rows[i];
+      tokens.push({
+        token: row.text,
+        logit: row.logit,
+        p_after_temperature: row.pAfterTemp,
+        nucleus_cumulative: row.status === 'cut_k' ? null : row.cumulative,
+        p_final: row.pFinal,
+        status: row.status
+      });
+    }
+    return {
+      note: 'Generated by the temperature-top-p-playground. Logits are user supplied, not measurements from any model.',
+      settings: { temperature: r.temperature, top_k: state.topK, top_p: state.topP, order: 'temperature, top_k, top_p, renormalize' },
+      counts: r.counts,
+      stats: {
+        entropy_bits: r.stats.entropyBits,
+        entropy_bits_before_truncation: r.stats.entropyBitsAfterTemp,
+        effective_vocabulary_perplexity: r.stats.perplexity,
+        tokens_retained: r.stats.retained,
+        top1_probability: r.stats.topProb
+      },
+      tokens: tokens
+    };
+  }
+
+  function csvCell(v) {
+    var s = String(v === undefined || v === null ? '' : v);
+    if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  el('copy-json').addEventListener('click', function (e) {
+    var data = buildExport();
+    if (!data) { flash(e.currentTarget, 'Nothing to copy'); return; }
+    copyText(JSON.stringify(data, null, 2), e.currentTarget);
+  });
+
+  el('copy-csv').addEventListener('click', function (e) {
+    var r = state.result;
+    if (!r || !r.ok) { flash(e.currentTarget, 'Nothing to copy'); return; }
+    var lines = ['token,logit,p_after_temperature,nucleus_cumulative,p_final,status'];
+    for (var i = 0; i < r.order.length; i++) {
+      var row = r.rows[r.order[i]];
+      lines.push([
+        csvCell(row.text),
+        csvCell(row.logit),
+        csvCell(row.pAfterTemp),
+        csvCell(row.status === 'cut_k' ? '' : row.cumulative),
+        csvCell(row.pFinal),
+        csvCell(row.status)
+      ].join(','));
+    }
+    copyText(lines.join('\n'), e.currentTarget);
+  });
+
+  el('copy-settings').addEventListener('click', function (e) {
+    var text = 'temperature=' + state.temperature + ' top_k=' + state.topK + ' top_p=' + state.topP +
+      ' vocabulary=' + state.tokens.length + ' order=temperature,top_k,top_p,renormalize';
+    copyText(text, e.currentTarget);
+  });
+
+  /* ---------- main update ---------- */
+  function updatePresetPressed() {
+    for (var i = 0; i < presetButtons.length; i++) {
+      var id = presetButtons[i].getAttribute('data-preset');
+      presetButtons[i].setAttribute('aria-pressed', id === state.preset ? 'true' : 'false');
+    }
+  }
+
+  function update(message) {
+    updatePresetPressed();
+
+    if (state.tokens.length === 0) {
+      state.result = null;
+      clear(stripEl);
+      clear(stagesEl);
+      clear(tilesEl);
+      clear(tbodyEl);
+      clear(sampOut);
+      var e1 = make('div', 'empty');
+      e1.appendChild(make('b', '', 'Empty vocabulary'));
+      e1.appendChild(make('span', '', 'Add a token above, or load a preset, and the whole pipeline appears here.'));
+      stagesEl.appendChild(e1);
+      setStatus('No tokens. Add one or load a preset to start.', 'warn');
+      return;
+    }
+
+    var r = runPipeline({
+      tokens: state.tokens,
+      temperature: state.temperature,
+      topK: state.topK,
+      topP: state.topP
+    });
+
+    if (!r.ok) {
+      state.result = null;
+      clear(stripEl);
+      clear(stagesEl);
+      clear(tilesEl);
+      clear(tbodyEl);
+      clear(sampOut);
+      var e2 = make('div', 'empty');
+      e2.appendChild(make('b', '', 'Cannot compute yet'));
+      e2.appendChild(make('span', '', r.error));
+      stagesEl.appendChild(e2);
+      setStatus(r.error, 'error');
+      return;
+    }
+
+    state.result = r;
+    renderStrip(r);
+    renderStages(r);
+    renderTiles(r);
+    renderTable(r);
+    renderSample(r);
+
+    if (message) {
+      /* A preset or edge-case note still gets the live softmax note appended,
+         so a tie at temperature 0 is never explained away silently. Skip it
+         when the canned note already says the same thing. */
+      var extra = '';
+      if (r.softNote && message.indexOf(r.softNote) === -1) {
+        var duplicate = r.mode === 'greedy' && r.tiedTop.length <= 1 && /greedy|argmax/i.test(message);
+        if (!duplicate) extra = ' ' + r.softNote;
+      }
+      setStatus(message + extra);
+    } else {
+      var parts = [];
+      if (r.softNote) parts.push(r.softNote);
+      if (r.mode !== 'greedy') {
+        if (r.k.noEffect && r.p.noEffect) parts.push('Neither truncation stage removed anything at these settings.');
+        else if (r.k.noEffect) parts.push('top_k removed nothing; top_p removed ' + r.p.cutIndices.length + ' token(s).');
+        else if (r.p.noEffect) parts.push('top_k removed ' + r.k.cutIndices.length + ' token(s); top_p removed nothing.');
+        else parts.push('top_k removed ' + r.k.cutIndices.length + ' token(s), then top_p removed ' + r.p.cutIndices.length + ' more.');
+      }
+      if (r.tiedTop.length > 1) parts.push(r.tiedTop.length + ' tokens are tied for the highest logit.');
+      setStatus(parts.join(' ') || 'Ready.');
+    }
+  }
+
+  /* ---------- boot ---------- */
+  renderTokenEditor();
+  pushControlsToInputs();
+  update('Loaded the confident preset. Drag a slider, edit a logit, or press "Load sample" for a one-click tour.');
+})();
+</script>
+</body>
+</html>
