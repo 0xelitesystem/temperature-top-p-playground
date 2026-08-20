@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -395,6 +395,41 @@ footer.bottom .row{gap:14px}
 @media (prefers-reduced-motion:no-preference){
   .bar-fill{transition:width .18s ease}
 }
+</style>
+<style>
+/* elitesystem brand tokens: chrome only, meaning preserved */
+:root, :root[data-theme="dark"] {
+  --accent: #d4ff3a;
+  --bad: #ff6450;
+  --bg: #0a0a0a;
+  --good: #7ddc7d;
+  --ink: #e8e8e3;
+  --ink-2: #a8a8a3;
+  --ink-3: #6e6e68;
+  --line: #1f1f1d;
+  --line-soft: #1f1f1d;
+  --on-accent: #0a0a0a;
+  --surface: #111110;
+  --surface-2: #161614;
+  --surface-3: #161614;
+}
+:root[data-theme="light"] {
+  --accent: #2d6b00;
+  --bad: #b8341a;
+  --bg: #e8ebef;
+  --good: #1a5c2e;
+  --ink: #0a0a0a;
+  --ink-2: #2a2a27;
+  --ink-3: #6e6e68;
+  --line: #c8cdd5;
+  --line-soft: #c8cdd5;
+  --on-accent: #ffffff;
+  --surface: #dee2e8;
+  --surface-2: #d3d7df;
+  --surface-3: #d3d7df;
+}
+:root { color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
 </style>
 </head>
 <body>
