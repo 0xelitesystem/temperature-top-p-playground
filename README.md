@@ -2,9 +2,18 @@
 
 Drag temperature, top_k and top_p and watch a real softmax distribution reshape live, with every stage of the truncation pipeline shown and the edge cases explained.
 
-## Live demo
+**Live demo:** https://0xelitesystem.github.io/temperature-top-p-playground/
 
-https://0xelitesystem.github.io/temperature-top-p-playground/
+## Use
+
+1. Pick a preset vocabulary (Confident, Flat / uncertain, Two-way tie, or Long tail), or edit the logits directly.
+2. Drag Temperature, top_k, and top_p, or click an edge case button such as T = 0 or top_k = 1.
+3. Read each pipeline stage and the Numbers panel.
+4. In the sampling demo, set Samples and Seed and click Draw samples to compare observed counts with the probabilities.
+
+## Why this exists
+
+Sampling parameters are usually explained with one sentence about creativity. This tool shows the actual math stage by stage on a small vocabulary you can edit, in one HTML file with no tracking and no network calls, released under the MIT license.
 
 ## Features
 
@@ -35,6 +44,19 @@ Note on ordering: providers differ, and most hosted APIs do not document their i
 ## Privacy
 
 Everything runs in your browser. Nothing is uploaded, nothing is logged, and the page makes no network requests of any kind. There is no analytics, no tracking, and no external dependencies. The only thing stored is your light or dark theme preference, in your own browser's local storage.
+
+## Run locally
+
+```
+git clone https://github.com/0xelitesystem/temperature-top-p-playground
+cd temperature-top-p-playground
+```
+
+Open `index.html` in a browser, or serve the folder with `python -m http.server` and visit http://localhost:8000.
+
+## Build
+
+No build step. The whole tool is one `index.html` file.
 
 ## License
 
